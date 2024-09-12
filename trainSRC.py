@@ -105,6 +105,8 @@ def main(args):
             rewards = env.end_episode()
             loss = criterion(result[1], rewards).cpu().detach().numpy()  # 和原文不一样
             mean_reward = np.mean(rewards.cpu().detach().numpy())
+            dataShow['loss'].append(loss.item())
+            dataShow['reward'].append(mean_reward)
             test_rewards.append(mean_reward)
             print(f'batch:{i}\tloss:{loss:.4f}\treward:{mean_reward:.4f}')
         print(result[0][:10])
