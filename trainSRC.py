@@ -103,7 +103,7 @@ def main(args):
             result = model(*data)
             env.n_step(result[0], binary=True)
             rewards = env.end_episode()
-            loss = model_train(result[1], rewards).cpu().detach().numpy()  # 和原文不一样
+            loss = criterion(result[1], rewards).cpu().detach().numpy()  # 和原文不一样
             mean_reward = np.mean(rewards.cpu().detach().numpy())
             test_rewards.append(mean_reward)
             print(f'batch:{i}\tloss:{loss:.4f}\treward:{mean_reward:.4f}')

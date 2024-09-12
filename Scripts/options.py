@@ -25,7 +25,7 @@ def get_options(parser: ArgumentParser, reset_args=None):
     model = ['DKT', 'CoKT']
     dataset = ['junyi', 'assist09', 'assist15']
     parser.add_argument('-a', '--agent', type=str, choices=agent, default='SRC')
-    parser.add_argument('-train', '--isTrain', type=bool, default=True)
+    parser.add_argument('-train', '--isTrain', type=bool, default=False)
     parser.add_argument('-m', '--model', type=str, choices=model, default='DKT', help='Model used in MPC or KES')
     parser.add_argument('-d', '--dataset', type=str, choices=dataset, default='assist09')
     parser.add_argument('-w', '--worker', type=int, default=6)
@@ -35,8 +35,8 @@ def get_options(parser: ArgumentParser, reset_args=None):
     parser.add_argument('--save_dir', type=str, default='./SavedModels')
     parser.add_argument('--visual_dir', type=str, default='./VisualResults')
     parser.add_argument('--steps', type=int, default=20)
-    parser.add_argument('--load_model', action='store_true', default=False)
-    parser.add_argument('--withKT', action='store_true', default=False, help='Whether to use KT as a secondary task')
+    parser.add_argument('--load_model', action='store_true', default=True)
+    parser.add_argument('--withKT', action='store_true', default=True, help='Whether to use KT as a secondary task')
     parser.add_argument('--binary', action='store_true', default=False, help='Whether the reward is binary')
 
     parser.add_argument('-c', '--cuda', type=int, default=0)
