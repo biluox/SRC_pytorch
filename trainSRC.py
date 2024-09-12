@@ -1,7 +1,11 @@
+import json
 import os
+import signal
+import sys
 import time
 from argparse import ArgumentParser
 
+import keyboard
 import numpy as np
 import torch
 from torch.optim import Adam
@@ -17,6 +21,8 @@ from Scripts.options import get_options
 from Scripts.utils import load_agent, get_data
 from trainDKT import polynomial_decay_lr
 
+dataShow = {'loss': [], 'reward': []}
+
 
 def main(args):
     set_random_seed(args.rand_seed)
@@ -25,7 +31,7 @@ def main(args):
     # device = torch.device("cpu")
 
     dataset = KTDataset(os.path.join(args.data_dir, args.dataset))
-    env = KESEnv(dataset, args.model, args.dataset,device)
+    env = KESEnv(dataset, args.model, args.dataset, device)
     args.skill_num = env.skill_num
     model = load_agent(args).to(device)
     if not os.path.exists(args.save_dir):
@@ -37,7 +43,9 @@ def main(args):
         print(f"Load Model From {model_path}")
     total_epochs = args.num_epochs  # 假设已有总训练周期
     optimizer = Adam(model.parameters(), lr=args.lr, weight_decay=args.l2_reg)
-    scheduler = LambdaLR(optimizer, lambda epoch: polynomial_decay_lr(epoch, total_epochs, args.lr, args.min_lr, 0.5))
+    # scheduler = LambdaLR(optimizer, lambda epoch: polynomial_decay_lr(epoch, total_epochs, args.lr, args.min_lr, 0.5))
+    scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=5, power=1.0, last_epoch=-1, verbose=True)
+
     criterion = pl_loss
 
     model_with_loss = ModelWithLoss(model, criterion)
@@ -59,15 +67,19 @@ def main(args):
                 t0 = time.perf_counter()
                 targets, initial_logs, origin_path = get_data(batch_size, skill_num, 3, 10, args.path, args.steps)
                 initial_log_scores = env.begin_episode(targets, initial_logs)
-                data = (targets.to(device), initial_logs.to(device), initial_log_scores.to(device), origin_path.to(device), args.steps)
+                data = (
+                    targets.to(device), initial_logs.to(device), initial_log_scores.to(device), origin_path.to(device),
+                    args.steps)
                 result = model(*data)
                 env.n_step(result[0].to(device), binary=True)
                 rewards = env.end_episode()
-                loss = model_train(*data[:], rewards).cpu().detach().numpy() # 和原文不一样
+                loss = model_train(*data[:-1], result[2], rewards).cpu().detach().numpy()  # 和原文不一样
                 mean_reward = np.mean(rewards.cpu().detach().numpy())
                 avg_time += time.perf_counter() - t0
                 epoch_mean_rewards.append(mean_reward)
                 all_rewards.append(mean_reward)
+                dataShow['loss'].append(loss.item())
+                dataShow['reward'].append(mean_reward)
                 print('Epoch:{}\tbatch:{}\tavg_time:{:.4f}\tloss:{:.4f}\treward:{:.4f}'
                       .format(epoch, i, avg_time / (i + 1), loss, mean_reward))
             scheduler.step()
@@ -86,18 +98,29 @@ def main(args):
         for i in tqdm(range(200)):
             targets, initial_logs, origin_path = get_data(batch_size, skill_num, 3, 10, args.path, args.steps)
             initial_log_scores = env.begin_episode(targets, initial_logs)
-            data = (targets.to(device), initial_logs.to(device), initial_log_scores.to(device), origin_path.to(device), args.steps)
+            data = (targets.to(device), initial_logs.to(device), initial_log_scores.to(device), origin_path.to(device),
+                    args.steps)
             result = model(*data)
             env.n_step(result[0], binary=True)
             rewards = env.end_episode()
-            loss = model_train(*data[:], rewards).cpu().detach().numpy() # 和原文不一样
+            loss = model_train(result[1], rewards).cpu().detach().numpy()  # 和原文不一样
             mean_reward = np.mean(rewards.cpu().detach().numpy())
             test_rewards.append(mean_reward)
             print(f'batch:{i}\tloss:{loss:.4f}\treward:{mean_reward:.4f}')
         print(result[0][:10])
         print(f"Mean Reward for Test:{np.mean(test_rewards)}")
 
+
 if __name__ == '__main__':
     parser = ArgumentParser("LearningPath-Planing")
     args_ = get_options(parser, {'agent': 'SRC', 'simulator': 'KES'})
-    main(args_)
+
+    def cleanup():
+        print("运行结束了，保存数据")
+        dataShow["loss"] = np.array(dataShow["loss"])
+        dataShow["reward"] = np.array(dataShow["reward"])
+        np.savez('./dataShow/data.npz', loss=dataShow["loss"], reward=dataShow["reward"])
+    try:
+        main(args_)
+    finally:
+        cleanup()

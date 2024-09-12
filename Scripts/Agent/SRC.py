@@ -4,6 +4,7 @@ from torch import nn
 from KTScripts.BackModels import Transformer, MLP
 import torch.nn.functional as F
 
+
 class SRC(nn.Module):
     def __init__(self, skill_num, input_size, weight_size, hidden_size, dropout, allow_repeat=False,
                  with_kt=False):
@@ -102,3 +103,30 @@ class SRC(nn.Module):
             return result
 
         return paths, probs, selecting_s
+
+    def backup(self, targets, initial_logs, initial_log_scores, origin_path, selecting_s):
+        targets, states = self.begin_episode(targets, initial_logs, initial_log_scores)
+        inputs = self.l2(self.embedding(origin_path))
+        encoder_states = inputs
+        encoder_states = self.path_encoder(encoder_states)
+        encoder_states += inputs
+
+        blend1 = self.W1(encoder_states + encoder_states.mean(dim=1, keepdim=True) + targets)  # (B, L, W)
+        selecting_states = encoder_states[torch.arange(encoder_states.shape[0]).unsqueeze(1), selecting_s]
+        selecting_states = torch.cat((torch.zeros_like(selecting_states[:, 0:1]), selecting_states[:, :-1]), dim=1)
+        hidden_states, _ = self.decoder(selecting_states, states)
+        blend2 = self.W2(hidden_states)  # (B, n, W)
+        blend_sum = blend1.unsqueeze(1) + blend2.unsqueeze(2)  # (B, n, L, W)
+        out = self.vt(blend_sum).squeeze(-1)  # (B, n, L)
+
+        # Masking probabilities according to output order
+        mask = selecting_s.unsqueeze(1).repeat(1, selecting_s.shape[-1], 1)  # (B, n, n)
+        mask = torch.tril(mask + 1, diagonal=-1).view(-1, mask.shape[-1])
+        out = out.view(-1, out.shape[-1])
+        out = torch.cat((torch.zeros_like(out[:, 0:1]), out), dim=-1)
+        out[torch.arange(out.shape[0]).unsqueeze(1), mask] = -1e9
+        out = out[:, 1:].view(origin_path.shape[0], -1, origin_path.shape[1])
+
+        out = F.softmax(out, dim=-1)
+        probs = out.gather(2, selecting_s.unsqueeze(-1)).squeeze(-1)
+        return probs

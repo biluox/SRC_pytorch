@@ -33,5 +33,5 @@ def load_d_agent(model_name, args, skill_num, with_label=True):
     #     model_path += '_without'
     # load_param_into_net(model, load_checkpoint(f'{model_path}.ckpt'))
     model.load_state_dict(torch.load(f'{model_path}'))  # 假设使用 .pth 格式
-    # model.eval()
+    model.eval()
     return model

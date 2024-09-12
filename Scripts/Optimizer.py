@@ -29,7 +29,7 @@ class ModelWithOptimizer(nn.Module):
 
     def forward(self, *data):
         # 计算损失和梯度
-        loss = self.model_with_loss(*data)
+        loss = self.model_with_loss.backup(*data)
         training = self.model_with_loss.training
         loss.backward()  # 反向传播
 
