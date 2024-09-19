@@ -35,7 +35,7 @@ def get_options(parser: ArgumentParser, reset_args=None):
     parser.add_argument('--save_dir', type=str, default='./SavedModels')
     parser.add_argument('--visual_dir', type=str, default='./VisualResults')
     parser.add_argument('--steps', type=int, default=20)
-    parser.add_argument('--load_model', action='store_true', default=False)
+    parser.add_argument('--load_model', action='store_true', default=True)
     parser.add_argument('--withKT', action='store_true', default=True, help='Whether to use KT as a secondary task')
     parser.add_argument('--binary', action='store_true', default=False, help='Whether the reward is binary')
 

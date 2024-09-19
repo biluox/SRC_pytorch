@@ -33,7 +33,7 @@ def get_options(parser: ArgumentParser, reset_args=None):
     parser.add_argument('--load_model',default=True, action='store_true')
     parser.add_argument('--without_label', action='store_true')
     parser.add_argument('-c', '--cuda', type=int, default=0)
-    parser.add_argument('-e', "--num_epochs", type=int, default=10000)
+    parser.add_argument('-e', "--num_epochs", type=int, default=1000)
     parser.add_argument("--lr", type=float, default=1e-2)
     parser.add_argument('--min_lr', type=float, default=1e-5)
     parser.add_argument('--valid_step', type=int, default=1000)

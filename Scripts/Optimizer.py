@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torchviz
 
 
 class ModelWithLoss(nn.Module):
@@ -11,8 +12,6 @@ class ModelWithLoss(nn.Module):
     def forward(self, *data):
         data, rewards = data[:-1], data[-1]
         output_data = self.model(*data)
-        training = self.model.training
-
         return self.criterion(output_data[1], rewards)
 
     def backup(self, *data):
@@ -30,8 +29,9 @@ class ModelWithOptimizer(nn.Module):
     def forward(self, *data):
         # 计算损失和梯度
         loss = self.model_with_loss.backup(*data)
-        training = self.model_with_loss.training
         loss.backward()  # 反向传播
+        dot = torchviz.make_dot(loss, params=dict(self.model_with_loss.named_parameters()))
+        dot.render("model_graph", format="png")  # 保存为 PNG 文件
 
         # 梯度裁剪
         torch.nn.utils.clip_grad_norm_(self.model_with_loss.parameters(), 20)

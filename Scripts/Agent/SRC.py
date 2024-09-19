@@ -119,7 +119,7 @@ class SRC(nn.Module):
         blend_sum = blend1.unsqueeze(1) + blend2.unsqueeze(2)  # (B, n, L, W)
         out = self.vt(blend_sum).squeeze(-1)  # (B, n, L)
 
-        # Masking probabilities according to output order
+        #  Masking probabilities according to output order
         mask = selecting_s.unsqueeze(1).repeat(1, selecting_s.shape[-1], 1)  # (B, n, n)
         mask = torch.tril(mask + 1, diagonal=-1).view(-1, mask.shape[-1])
         out = out.view(-1, out.shape[-1])

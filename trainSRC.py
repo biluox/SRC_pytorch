@@ -26,7 +26,7 @@ dataShow = {'loss': [], 'reward': []}
 
 def main(args):
     set_random_seed(args.rand_seed)
-    torch.autograd.set_detect_anomaly(True)
+    # torch.autograd.set_detect_anomaly(True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # device = torch.device("cpu")
 

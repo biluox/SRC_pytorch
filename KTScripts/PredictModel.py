@@ -65,7 +65,6 @@ class PredictModel(nn.Module):
             x_i = x[:, i:i + 1]
             if self.with_label and get_score:
                 x_i = torch.cat((x_i, o), dim=-1)
-            training = self.rnn.training
             with torch.no_grad():
                 o, states = self.rnn(x_i, states)
             if get_score:
