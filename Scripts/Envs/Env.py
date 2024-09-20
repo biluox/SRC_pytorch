@@ -41,14 +41,17 @@ class KESEnv():
             scores = (scores > 0.5).float()  # 将得分转换为二进制（0 或 1）
         return scores
 
-    def end_episode(self, **kwargs):
-        final_score, reward = self.end_episode_(self.initial_score, self.targets, *self.states)
-        if 'score' in kwargs:
-            return final_score, reward
-        return reward
+    def end_episode(self, length):
+        final_score, reward,reward_punish = self.end_episode_(self.initial_score, self.targets, *self.states,length)
+        # if 'score' in kwargs:
+        #     return final_score, reward
+        return reward,reward_punish
 
     # 学到最后一轮，根据以前学习过的知识的状态，计算目标知识点的得分，并计算Et
-    def end_episode_(self, initial_score, targets, states1, states2):
+    def end_episode_(self, initial_score, targets, states1, states2,length):
         final_score = self.exam(targets, (states1, states2))
         reward = episode_reward(initial_score, final_score, 1).unsqueeze(-1)
-        return final_score, reward
+        punish = (2 * (length - 1) / 19 - 1).unsqueeze(-1)
+        reward_punish = reward - punish
+        return final_score, reward,reward_punish
+

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn.utils.rnn import pad_sequence
 
 from KTScripts.BackModels import Transformer, MLP
 import torch.nn.functional as F
@@ -12,6 +13,7 @@ class SRC(nn.Module):
         self.embedding = nn.Embedding(skill_num, input_size)
         self.l1 = nn.Linear(input_size + 1, input_size)
         self.l2 = nn.Linear(input_size, hidden_size)
+        self.prune_l3 = nn.Linear(20, 20)
         self.state_encoder = nn.LSTM(input_size, hidden_size, batch_first=True)
         self.path_encoder = Transformer(hidden_size, hidden_size, 0.0, head=1, b=1, transformer_mask=False)
         self.W1 = nn.Linear(hidden_size, weight_size, bias=False)  # blending encoder
@@ -47,6 +49,17 @@ class SRC(nn.Module):
         # 处理 LSTM 的状态
         _, states = self.state_encoder(x, states)
         return states
+
+    def prune(self,select_emb,target_emb):
+        target = target_emb.squeeze(1)
+        similarity = torch.bmm(select_emb,target.unsqueeze(2)).squeeze(2)
+        similarity = self.prune_l3(similarity)
+        normalized_sim = F.normalize(similarity,dim=1)
+        weights = torch.sigmoid(normalized_sim)
+        # weight
+        # threshold = torch.percentile(weights, 30)
+
+        return weights > 0.5
 
     def forward(self, targets, initial_logs, initial_log_scores, origin_path, n):
         targets, states = self.begin_episode(targets, initial_logs, initial_log_scores)
@@ -95,11 +108,16 @@ class SRC(nn.Module):
         paths = torch.stack(paths, dim=1)  # (B, n)
         selecting_s = torch.stack(selecting_s, dim=1)
 
+
+        select_emb = encoder_states[a1.unsqueeze(1),selecting_s]
+        select_mask = self.prune(select_emb,targets)
+        select_fina = [path[data_row[bool_row]] for data_row, bool_row,path in zip(selecting_s, select_mask,origin_path)]
+        pad_path = pad_sequence(select_fina,batch_first=True)
         if self.withKt and self.training:
             hidden_states.append(self.decoder(decoder_input, states)[0])
             hidden_states = torch.cat(hidden_states, dim=1)
             kt_output = torch.sigmoid(self.ktMlp(hidden_states))
-            result = [paths, probs, selecting_s, kt_output]
+            result = [paths, probs, selecting_s, kt_output,pad_path]
             return result
 
         return paths, probs, selecting_s

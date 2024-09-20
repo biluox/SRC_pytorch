@@ -21,7 +21,7 @@ from Scripts.options import get_options
 from Scripts.utils import load_agent, get_data
 from trainDKT import polynomial_decay_lr
 
-dataShow = {'loss': [], 'reward': []}
+dataShow = {'loss': [], 'reward': [], 'length': [], 'reward_origin': []}
 
 
 def main(args):
@@ -71,17 +71,22 @@ def main(args):
                     targets.to(device), initial_logs.to(device), initial_log_scores.to(device), origin_path.to(device),
                     args.steps)
                 result = model(*data)
-                env.n_step(result[0].to(device), binary=True)
-                rewards = env.end_episode()
-                loss = model_train(*data[:-1], result[2], rewards).cpu().detach().numpy()  # 和原文不一样
-                mean_reward = np.mean(rewards.cpu().detach().numpy())
+                length = torch.count_nonzero(result[4], dim=1)
+                mean_length = torch.mean(length.detach().float()).item()
+                env.n_step(result[4].to(device), binary=True)
+                rewards, reward_punish = env.end_episode(length)
+                loss = model_train(*data[:-1], result[2], reward_punish).cpu().detach().numpy()  # 和原文不一样
+                mean_reward = np.mean(reward_punish.cpu().detach().numpy())
+                mean_reward_origin = np.mean(rewards.cpu().detach().numpy())
                 avg_time += time.perf_counter() - t0
                 epoch_mean_rewards.append(mean_reward)
                 all_rewards.append(mean_reward)
                 dataShow['loss'].append(loss.item())
                 dataShow['reward'].append(mean_reward)
-                print('Epoch:{}\tbatch:{}\tavg_time:{:.4f}\tloss:{:.4f}\treward:{:.4f}'
-                      .format(epoch, i, avg_time / (i + 1), loss, mean_reward))
+                dataShow['reward_origin'].append(mean_reward_origin)
+                dataShow['length'].append(mean_length)
+                print('Epoch:{}\tbatch:{}\tavg_time:{:.4f}\tloss:{:.4f}\treward:{:.4f}\tlength:{}'
+                      .format(epoch, i, avg_time / (i + 1), loss, mean_reward, mean_length))
             scheduler.step()
             print(targets[:10], '\n', result[0][:10])
             all_mean_rewards.append(np.mean(epoch_mean_rewards))
@@ -117,11 +122,17 @@ if __name__ == '__main__':
     parser = ArgumentParser("LearningPath-Planing")
     args_ = get_options(parser, {'agent': 'SRC', 'simulator': 'KES'})
 
+
     def cleanup():
         print("运行结束了，保存数据")
         dataShow["loss"] = np.array(dataShow["loss"])
         dataShow["reward"] = np.array(dataShow["reward"])
-        np.savez('./dataShow/data.npz', loss=dataShow["loss"], reward=dataShow["reward"])
+        dataShow["length"] = np.array(dataShow["length"])
+        dataShow["reward_origin"] = np.array(dataShow["reward_origin"])
+        np.savez('./dataShow/data.npz', loss=dataShow["loss"], reward=dataShow["reward"], length=dataShow["length"],
+                 reward_origin=dataShow["reward_origin"])
+
+
     try:
         main(args_)
     finally:
