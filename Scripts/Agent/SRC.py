@@ -59,7 +59,7 @@ class SRC(nn.Module):
         # weight
         # threshold = torch.percentile(weights, 30)
 
-        return weights > 0.5
+        return weights > 0.3 # 待改进
 
     def forward(self, targets, initial_logs, initial_log_scores, origin_path, n):
         targets, states = self.begin_episode(targets, initial_logs, initial_log_scores)
