@@ -30,8 +30,8 @@ class ModelWithOptimizer(nn.Module):
         # 计算损失和梯度
         loss = self.model_with_loss.backup(*data)
         loss.backward()  # 反向传播
-        dot = torchviz.make_dot(loss, params=dict(self.model_with_loss.named_parameters()))
-        dot.render("model_graph", format="png")  # 保存为 PNG 文件
+        # dot = torchviz.make_dot(loss, params=dict(self.model_with_loss.named_parameters()))
+        # dot.render("model_graph", format="png")  # 保存为 PNG 文件
 
         # 梯度裁剪
         torch.nn.utils.clip_grad_norm_(self.model_with_loss.parameters(), 20)
