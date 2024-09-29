@@ -8,12 +8,12 @@ import torch.nn.functional as F
 
 class SRC(nn.Module):
     def __init__(self, skill_num, input_size, weight_size, hidden_size, dropout, allow_repeat=False,
-                 with_kt=False):
+                 with_kt=False,steps=20):
         super(SRC, self).__init__()
         self.embedding = nn.Embedding(skill_num, input_size)
         self.l1 = nn.Linear(input_size + 1, input_size)
         self.l2 = nn.Linear(input_size, hidden_size)
-        self.prune_l3 = nn.Linear(20, 20)
+        self.prune_l3 = nn.Linear(steps, steps)
         self.state_encoder = nn.LSTM(input_size, hidden_size, batch_first=True)
         self.path_encoder = Transformer(hidden_size, hidden_size, 0.0, head=1, b=1, transformer_mask=False)
         self.W1 = nn.Linear(hidden_size, weight_size, bias=False)  # blending encoder
@@ -59,7 +59,7 @@ class SRC(nn.Module):
         # weight
         # threshold = torch.percentile(weights, 30)
 
-        return weights > 0.3 # 待改进
+        return weights > 0.4 # 待改进
 
     def forward(self, targets, initial_logs, initial_log_scores, origin_path, n):
         targets, states = self.begin_episode(targets, initial_logs, initial_log_scores)
@@ -111,16 +111,21 @@ class SRC(nn.Module):
 
         select_emb = encoder_states[a1.unsqueeze(1),selecting_s]
         select_mask = self.prune(select_emb,targets)
-        select_fina = [path[data_row[bool_row]] for data_row, bool_row,path in zip(selecting_s, select_mask,origin_path)]
+        select_fina,select_index = [],[]
+        for data_row, bool_row,path in zip(selecting_s, select_mask,origin_path):
+            select_fina.append(path[data_row[bool_row]])
+            select_index.append(data_row[bool_row])
+        # select_fina = [path[data_row[bool_row]] for data_row, bool_row,path in zip(selecting_s, select_mask,origin_path)]
         pad_path = pad_sequence(select_fina,batch_first=True)
+        select_index = pad_sequence(select_index,batch_first=True)
         if self.withKt and self.training:
             hidden_states.append(self.decoder(decoder_input, states)[0])
             hidden_states = torch.cat(hidden_states, dim=1)
             kt_output = torch.sigmoid(self.ktMlp(hidden_states))
-            result = [paths, probs, selecting_s, kt_output,pad_path]
+            result = [paths, probs, select_index,pad_path]
             return result
 
-        return paths, probs, selecting_s
+        return paths, probs,select_index,pad_path
 
     def backup(self, targets, initial_logs, initial_log_scores, origin_path, selecting_s):
         targets, states = self.begin_episode(targets, initial_logs, initial_log_scores)

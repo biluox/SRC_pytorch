@@ -36,7 +36,7 @@ def main(args):
     model = load_agent(args).to(device)
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
-    model_path = os.path.join(args.save_dir, args.exp_name + str(args.path))
+    model_path = os.path.join(args.save_dir, args.exp_name + str(args.path)) +"_"+ str(args.steps)
 
     if args.load_model:
         model.load_state_dict(torch.load(f'{model_path}'))  # 假设使用 .pth 格式
@@ -71,9 +71,9 @@ def main(args):
                     targets.to(device), initial_logs.to(device), initial_log_scores.to(device), origin_path.to(device),
                     args.steps)
                 result = model(*data)
-                length = torch.count_nonzero(result[4], dim=1)
+                length = torch.count_nonzero(result[3], dim=1)
                 mean_length = torch.mean(length.detach().float()).item()
-                env.n_step(result[4].to(device), binary=True)
+                env.n_step(result[3].to(device), binary=True)
                 rewards, reward_punish = env.end_episode(length)
                 loss = model_train(*data[:-1], result[2], reward_punish).cpu().detach().numpy()  # 和原文不一样
                 mean_reward = np.mean(reward_punish.cpu().detach().numpy())

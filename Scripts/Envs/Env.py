@@ -51,7 +51,7 @@ class KESEnv():
     def end_episode_(self, initial_score, targets, states1, states2,length):
         final_score = self.exam(targets, (states1, states2))
         reward = episode_reward(initial_score, final_score, 1).unsqueeze(-1)
-        punish = (2 * (length - 1) / 19 - 1).unsqueeze(-1)
+        punish = (2 * (length - 1) / 29).unsqueeze(-1)
         reward_punish = reward - punish
         return final_score, reward,reward_punish
 

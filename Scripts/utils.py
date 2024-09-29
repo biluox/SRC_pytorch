@@ -12,7 +12,8 @@ def load_agent(args):
             weight_size=args.hidden_size,
             hidden_size=args.hidden_size,
             dropout=args.dropout,
-            with_kt=args.withKT
+            with_kt=args.withKT,
+            steps = args.steps
         )
 
 
