@@ -13,7 +13,7 @@ class KTDataset(Dataset):
         with np.load(os.path.join(data_folder, folder_name + '.npz'), allow_pickle=True) as data:
             self.data = [data[k] for k in ['skill', 'y', 'real_len']]
             if folder_name == 'junyi':
-                self.data[0] = data['problem'] - 1
+                self.data[0] = data['problem']
 
         self.data[1] = [_.astype(np.float32) for _ in self.data[1]]
 

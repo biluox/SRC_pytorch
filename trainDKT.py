@@ -40,7 +40,7 @@ def main(args: Namespace):
     set_random_seed(args.rand_seed)
     dataset = KTDataset(os.path.join(args.data_dir, args.dataset))
     args.feat_nums, args.user_nums = dataset.feats_num, dataset.users_num
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda >= 0 else "cpu")
     train_loader, test_loader = dataSPlit(dataset)
 
     model = load_model(args).to(device)

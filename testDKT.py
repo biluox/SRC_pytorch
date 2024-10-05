@@ -39,8 +39,9 @@ def main(args: Namespace):
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
     # 加载模型
-    model.load_state_dict(torch.load(f'{model_path}'))  # 假设使用 .pth 格式
-    print(f"Load Model From {model_path}")
+    if args.load_model:
+        model.load_state_dict(torch.load(f'{model_path}'))  # 假设使用 .pth 格式
+        print(f"Load Model From {model_path}")
     model_with_loss = ModelWithLoss(model, nn.BCELoss(reduction='mean'))
     train_total, test_total = len(train_loader), len(test_loader)
     best_val_auc = 0
