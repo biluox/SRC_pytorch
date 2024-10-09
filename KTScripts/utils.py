@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
 
-from KTScripts.PredictModel import PredictModel
+from KTScripts.PredictModel import PredictModel, PredictRetrieval
 
 
 def set_random_seed(seed):
@@ -25,16 +25,27 @@ def set_random_seed(seed):
 def load_model(args: (Namespace, dict)):
     if isinstance(args, dict):
         args = Namespace(**args)
+    if args.model in ('DKT', 'Transformer', 'GRU4Rec'):
+        return PredictModel(
+            feat_nums=args.feat_nums,
+            embed_size=args.embed_size,
+            hidden_size=args.hidden_size,
+            pre_hidden_sizes=args.pre_hidden_sizes,
+            dropout=args.dropout,
+            output_size=args.output_size,
+            with_label=not args.without_label,
+            model_name=args.model)
 
-    return PredictModel(
-        feat_nums=args.feat_nums,
-        embed_size=args.embed_size,
-        hidden_size=args.hidden_size,
-        pre_hidden_sizes=args.pre_hidden_sizes,
-        dropout=args.dropout,
-        output_size=args.output_size,
-        with_label=not args.without_label,
-        model_name=args.model)
+    if args.model == 'CoKT':
+        return PredictRetrieval(
+            feat_nums=args.feat_nums,
+            input_size=args.embed_size,
+            hidden_size=args.hidden_size,
+            pre_hidden_sizes=args.pre_hidden_sizes,
+            dropout=args.dropout,
+            with_label=not args.without_label,
+            model_name=args.model)
+    raise NotImplementedError
 
 
 def evaluate_utils(y_, y):
@@ -46,4 +57,3 @@ def evaluate_utils(y_, y):
         if len(y_.shape) == 1:
             auc = roc_auc_score(y_true=y, y_score=y_)
     return acc, auc
-

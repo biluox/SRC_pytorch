@@ -98,7 +98,7 @@ class MultiHeadedAttention(nn.Module):
         return torch.matmul(p_attn, value), p_attn
 
     def forward(self, query, key, value, mask=None):
-        q_1,q_2 = query.size(0),query.size(1)
+        q_1, q_2 = query.size(0), query.size(1)
         query, key, value = [
             l(x).view(x.size(0), x.size(1), self.head, self.head_size).transpose(1, 2)
             for l, x in zip(self.linear_s, (query, key, value))
@@ -139,7 +139,7 @@ class Transformer(nn.Module):
             self.pe = PositionalEncoding(input_size, dropout_rate)
         self.fc = nn.Linear(input_size, hidden_size)
         self.SAs = nn.ModuleList([MultiHeadedAttention(head, hidden_size, dropout_rate) for _ in range(b)])
-        self.FFNs = nn.ModuleList([FeedForward(head,hidden_size, dropout_rate) for _ in range(b)])
+        self.FFNs = nn.ModuleList([FeedForward(head, hidden_size, dropout_rate) for _ in range(b)])
         self.b = b
         self.transformer_mask = transformer_mask
 
@@ -159,6 +159,89 @@ class Transformer(nn.Module):
 
         for i in range(self.b):
             inputs = self.SAs[i](inputs, inputs, inputs, mask)
-            inputs = self.FFNs[i](inputs,mask)
+            inputs = self.FFNs[i](inputs, mask)
 
         return inputs
+
+
+class CoKT(nn.Module):
+    def __init__(self, input_size, hidden_size, dropout_rate, head=2):
+        super(CoKT, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.rnn = nn.GRU(input_size, hidden_size, batch_first=True)
+        self.ma_inter = MultiHeadedAttention(head, hidden_size, dropout_rate,
+                                             input_sizes=(hidden_size + input_size - 1,
+                                                          hidden_size + input_size - 1,
+                                                          hidden_size + input_size,
+                                                          hidden_size))
+        self.ma_intra = MultiHeadedAttention(head, hidden_size, dropout_rate,
+                                             input_sizes=(input_size - 1,
+                                                          input_size - 1,
+                                                          hidden_size + 1,
+                                                          hidden_size))
+        self.wr = nn.Parameter(torch.randn(1, 1, 2))
+        self.ln = nn.Linear(2 * hidden_size + input_size - 1, hidden_size)
+
+    def forward(self, intra_x, inter_his, inter_r, intra_mask, inter_len):
+        # (B, L, I), (B, L*R, L, I), (B, L, R, I), (B, L), (B, L, R)
+        intra_mask = intra_mask.unsqueeze(-1)  # (B, L, 1)
+
+        intra_h, _ = self.rnn(intra_x)  # (B, L, H)
+        intra_h_mask = intra_h.masked_select(intra_mask).view(-1, self.hidden_size)  # (seq_sum, H)
+        intra_x_mask = intra_x.masked_select(intra_mask).view(-1, self.input_size)  # (seq_sum, I)
+
+        # inter attention
+        intra_mask_ = intra_mask.unsqueeze(-1)  # (B, L, 1, 1)
+        inter_his, _ = self.rnn(
+            inter_his.view(inter_his.size(0) * inter_his.size(1), *inter_his.size()[2:]))  # (B*L*R, L, H)
+        inter_his = inter_his[torch.arange(inter_his.size(0)), inter_len.view(-1) - 1]  # (B*L*R, H)
+        inter_his = inter_his.view(*inter_len.size(), self.hidden_size)  # (B, L, R, H)
+        inter_his = inter_his.masked_select(intra_mask_).view(-1, *inter_his.size()[2:])  # (seq_sum, R, H)
+        inter_r = inter_r.masked_select(intra_mask_).view(-1, *inter_r.size()[2:])  # (seq_sum, R, I)
+
+        M_rv = torch.cat((inter_his, inter_r), dim=-1).view(*inter_r.size()[:2],
+                                                            self.hidden_size + self.input_size)  # (seq_sum, R, H+I)
+        M_pv = M_rv[:, :, :-1].view(*M_rv.size()[:2], self.input_size + self.hidden_size - 1)  # (seq_sum, R, H+I-1)
+        m_pv = torch.cat((intra_h_mask, intra_x_mask[:, :-1]), dim=1).view(M_pv.size(0), 1,
+                                                                           self.hidden_size + self.input_size - 1)  # (seq_sum, 1, H+I-1)
+        v_v = self.ma_inter(m_pv, M_pv, M_rv).squeeze(1)  # (seq_sum, H)
+
+        # intra attention
+        intra_x_p = intra_x[:, :, :-1]  # (B, L, I-1)
+        intra_h_p = torch.cat((intra_h, intra_x[:, :, -1:]), dim=-1)  # (B, L, H+1)
+        intra_mask_attn = torch.tril(torch.ones((1, 1, intra_x_p.size(1), intra_x_p.size(1)), dtype=torch.bool))
+        v_h = self.ma_intra(intra_x_p, intra_x_p, intra_h_p, mask=intra_mask_attn)  # (B, L, H)
+        v_h = v_h.masked_select(intra_mask).view(-1, v_h.size(-1))  # (seq_sum, H)
+
+        v = torch.sum(F.softmax(self.wr, dim=-1) * torch.stack((v_v, v_h), dim=-1), dim=-1)  # (seq_sum, H)
+        return self.ln(torch.cat((v, intra_h_mask, intra_x_mask[:, :-1]), dim=1))  # (seq_sum, H)
+
+    def deal_inter(self, inter_his, inter_r, inter_len):
+        inter_his, _ = self.rnn(
+            inter_his.view(inter_his.size(0) * inter_his.size(1), *inter_his.size()[2:]))  # (B*L*R, L, H)
+        inter_his = inter_his[torch.arange(inter_his.size(0)), inter_len.view(-1) - 1]  # (B*L*R, H)
+        inter_his = inter_his.view(*inter_len.size(), self.hidden_size)  # (B, L, R, H)
+        M_rv = torch.cat((inter_his, inter_r), dim=-1).view(*inter_r.size()[:3],
+                                                            self.hidden_size + self.input_size)  # (B, L, R, H+I)
+        M_pv = M_rv[:, :, :-1].view(*M_rv.size()[:3], self.input_size + self.hidden_size - 1)  # (B, L, R, H+I)
+        return M_rv, M_pv
+
+    def step(self, m_rv, M_pv, intra_x, o, intra_h_p=None):
+        # M_*: (B, R, H)
+        # intra_h_p:(B, L-1, H+1), with the y
+        # intra_x:(B, L, I-1), without the y
+        # o: y from last step
+        intra_h_next, _ = self.rnn(torch.cat((intra_x[:, -1:], o), dim=-1),
+                                   None if intra_h_p is None else intra_h_p[:, -1, :-1].unsqueeze(0))  # (B, 1, H)
+        m_pv = torch.cat((intra_h_next, intra_x[:, -1:]), dim=-1)  # (B, 1, H+I-1)
+        v_v = self.ma_inter(m_pv, M_pv, m_rv)  # (B, 1, H)
+
+        intra_x_p = intra_x
+        intra_h_next = torch.cat((intra_h_next, o), dim=-1)
+        intra_h_p = intra_h_next if intra_h_p is None else torch.cat((intra_h_p, intra_h_next), dim=1)  # (B, L, H+1)
+
+        # Sequence mask
+        v_h = self.ma_intra(intra_x_p[:, -1:], intra_x_p, intra_h_p)  # (B, 1, H), only query last target item
+        v = torch.sum(F.softmax(self.wr, dim=-1) * torch.stack((v_v, v_h), dim=-1), dim=-1)  # (B, 1, H)
+        return self.ln(torch.cat((v, intra_h_p[:, -1:, :-1], intra_x[:, -1:]), dim=-1)), intra_h_p  # (B, 1, 2*H+I-1)

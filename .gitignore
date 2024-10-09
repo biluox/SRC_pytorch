@@ -1,1 +1,5 @@
 *.docx
+SavedModels
+dataShow
+model_graph
+model_graph.png

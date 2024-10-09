@@ -28,9 +28,9 @@ def load_d_agent(model_name, args, skill_num, with_label=True):
     model = load_model(model_parameters)
     parser = ArgumentParser("LearningPath-Planing")
     args = get_options(parser)
-    model_path = os.path.join(args.save_dir, args.exp_name)
-    # if not with_label:
-    #     model_path += '_without'
+    model_path = os.path.join(args.save_dir, f'{model_name}_{args.dataset}')
+    if not with_label:
+        model_path += '_without'
     # load_param_into_net(model, load_checkpoint(f'{model_path}.ckpt'))
     model.load_state_dict(torch.load(f'{model_path}'))  # 假设使用 .pth 格式
     model.eval()

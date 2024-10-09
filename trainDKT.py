@@ -42,7 +42,8 @@ def main(args: Namespace):
     args.feat_nums, args.user_nums = dataset.feats_num, dataset.users_num
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda >= 0 else "cpu")
     train_loader, test_loader = dataSPlit(dataset)
-
+    if args.forRec:
+        args.output_size = args.feat_nums
     model = load_model(args).to(device)
 
     model_path = os.path.join(args.save_dir, args.exp_name)
@@ -83,10 +84,10 @@ def main(args: Namespace):
             # 计算损失和评估指标
             avg_time += time.perf_counter() - t0
             acc, auc = evaluate_utils(*output_data)  # 假设 evaluate_utils 已定义
-            # print('Epoch:{}\tbatch:{}\tavg_time:{:.4f}\tloss:{:.4f}\tacc:{:.4f}\tauc:{:.4f}'
-            #       .format(epoch, i, avg_time / (i + 1), loss.item(), acc, auc))
+            print('Epoch:{}\tbatch:{}\tavg_time:{:.4f}\tloss:{:.4f}\tacc:{:.4f}\tauc:{:.4f}'
+                  .format(epoch, i, avg_time / (i + 1), loss.item(), acc, auc))
         scheduler.step()
-        print('-' * 20 + "Validating Start" + '-' * 20)
+        # print('-' * 20 + "Validating Start" + '-' * 20)
         val_eval = [[], []]
         loss_total, data_total = 0, 0
         model.eval()  # 设置模型为评估模式
